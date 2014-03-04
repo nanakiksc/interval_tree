@@ -148,14 +148,6 @@ def create_trees_dict(intervals_file):
  
     return trees
 
-def DFS_point_query(trees, query):
-    """
-    Perform a depth-first search of the query point on the interval tree and
-    yield the tree intervals that overlap with the query.
-    query must be a 2-tuple like (chromosome, position).
-    """
-    pass
-
 def DFS_interval_query(trees, query):
     """
     Generator funtion. Perform a depth-first search of the query interval on the
@@ -164,13 +156,23 @@ def DFS_interval_query(trees, query):
     """
     set_recursion_limit()
 
-    chrom, start, end = query # Implicitly raises a ValueError if not 3-tuple.
-    position = (int(start), int(end))
+    if len(query) == 2:
+        chrom, start, end = query
+        position = (int(start), int(end))
+        is_interval = True
+    elif len(query) == 1:
+        position = query
+        is_interval = False
+    else:
+        raise ValueError('Bad query formatting:\n' +
+            'Use a 3-tuple (Chromosome,Start,End) for querying intervals or\n' +
+            'a 2-tuple (Chromosome,Position) for querying points.')
+
     total_found = []
     for chromosome in trees:
         if chrom != chromosome:
             continue
-        for found in trees[chromosome].query_interval(position):
+        for found in trees[chromosome].query_interval(position, is_interval):
             total_found.extend(found)
     
     if not total_found:
