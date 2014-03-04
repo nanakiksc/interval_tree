@@ -109,7 +109,7 @@ def build_tree(intervals):
     centered = [i for i in intervals if i[0] <= center <= i[1]]
     left = [i for i in intervals if i[1] < center]
     right = [i for i in intervals if center < i[0]]
-    # Nodes
+
     node = Node(center)
     node.centered = centered
     if left:
