@@ -16,6 +16,8 @@
 import sys
 from collections import defaultdict
 
+from gzopen import gzopen
+
 # Really big trees could cause RuntimeError: maximum recursion depth exceeded.
 # Change this value to an integer > 1000 if you get this error.
 MAX_RECURSION_DEPTH = sys.getrecursionlimit()
@@ -31,7 +33,6 @@ class Node():
         self.center = int(center)
         self.centered = []
         self.children = [None, None]
-        self.is_empty = False
 
     def __repr__(self):
         return 'Node at %d. Overlaps with %d intervals. %d children nodes' \
@@ -49,7 +50,7 @@ class Node():
         assert self.children[index] is None, 'Child overwriting!'
         self.children[index] = new_child
 
-    def query_point(self, query, is_sorted):
+    def query_point(self, query):
         """
         Generator function. Yield a list of intervals (iv) in the tree that
         contain the query point.
@@ -58,68 +59,38 @@ class Node():
         yield [iv for iv in self.centered if iv[0] <= query <= iv[1]]
 
         if query < self.center \
-        and self.children[0] \
-        and not self.children[0].is_empty:
+        and self.children[0]: 
  
-            empty = True
-            for found in self.children[0].query_point(query, is_sorted):
-                if found:
-                    empty = False
+            for found in self.children[0].query_point(query):
                 yield found
-
-            if empty and is_sorted:
-                self.children[0].is_empty = True
 
         elif self.center < query \
-        and self.children[1] \
-        and not self.children[1].is_empty:
+        and self.children[1]:
 
-            empty = True
-            for found in self.children[1].query_point(query, is_sorted):
-                if found:
-                    empty = False
+            for found in self.children[1].query_point(query):
                 yield found
 
-            if empty and is_sorted:
-                self.children[1].is_empty = True
-
-    def query_interval(self, query, is_sorted):
+    def query_interval(self, query):
         """
         Generator function. Yield a list of intervals (iv) in the tree that
         overlap, at least partially, with the query interval.
         """
 
         yield [iv for iv in self.centered if iv[0] <= query[1] \
-                                         and iv[1] >= query[0])]
+                                         and iv[1] >= query[0]]
 
         if query[0] < self.center \
-        and self.children[0] \
-        and not self.children[0].is_empty():
+        and self.children[0]:
 
-            empty = True
-            for found in self.children[0].query_interval(query, is_sorted):
-                if found:
-                    empty = False
+            for found in self.children[0].query_interval(query):
                 yield found
-
-            if empty and is_sorted:
-                self.children[0].is_empty = True
 
         if self.center < query[1] \
-        and self.children[1] \
-        and not self.children[1].is_empty:
+        and self.children[1]:
 
-            empty = True
-            for found in self.children[1].query_interval(query, is_sorted):
-                if found:
-                    empty = False
+            for found in self.children[1].query_interval(query):
                 yield found
 
-            if empty and is_sorted:
-                self.children[1].is_empty = True
-
-    def update_queue(queue):
-        queue.append(self) 
 
 class InputFormatError(Exception):
     """
@@ -177,7 +148,7 @@ def create_trees_dict(intervals_file):
 
     # Temp dictionary that holds a list of all the intervals in each chromosme.
     chromosomes = defaultdict(list)
-    with open(intervals_file) as fin:
+    with gzopen(intervals_file) as fin:
         slines = (line.rstrip().split(None,3) for line in fin)
         for inter in slines:
             try:
@@ -198,23 +169,18 @@ def create_trees_dict(intervals_file):
     # Final dictionary with one tree per chromosome.
     trees = defaultdict()
     for chromosome in chromosomes:
-        chromosomes[chromosome].sort()
         trees[chromosome] = build_tree(chromosomes[chromosome])
 
     del chromosomes
  
     return trees
 
-def DFS_interval_query(trees, query, is_sorted):
+def DFS_interval_query(trees, query):
     """
     Generator funtion. Perform a depth-first search of the query interval on the
     interval tree and yield the tree intervals that overlap with the query. 
     query must be a 3-tuple like (chromosome, start, end) for intervals and a
     2-tuple like (chromosome, position) for points.
-    When importing this function, if is_sorted == True and multiple files are
-    queried, self.is_empty has to be reinitialized to False for all nodes in the
-    tree after each file is queried. Otherwise no nodes will be checked after
-    the first file is completed!
     """
 
     set_recursion_limit()
@@ -234,10 +200,10 @@ def DFS_interval_query(trees, query, is_sorted):
         if chrom != chromosome:
             continue
         if is_interval:
-            for found in trees[chromosome].query_interval(position, is_sorted):
+            for found in trees[chromosome].query_interval(position):
                 total_found.extend(found)
         else:
-            for found in trees[chromosome].query_point(position, is_sorted):
+            for found in trees[chromosome].query_point(position):
                 total_found.extend(found)
     
     if not total_found:
@@ -245,7 +211,7 @@ def DFS_interval_query(trees, query, is_sorted):
     for hit in total_found:
         yield tuple([chrom] + [field for field in hit])
 
-def query_from_main(trees, interval, is_sorted):
+def query_from_main(trees, interval):
     try:
         query = [interval[0], int(interval[1])]
     except IndexError:
@@ -262,29 +228,22 @@ def query_from_main(trees, interval, is_sorted):
                 )
         
     query = tuple(query)
-    for overlap in DFS_interval_query(trees, query, is_sorted):
+    for overlap in DFS_interval_query(trees, query):
         print overlap
 
 
 if __name__ == '__main__':
-    from gzopen import gzopen
     try:
         tree_file = sys.argv[1]
         query_file = sys.argv[2]
-        if sys.argv[3] == '--sorted':
-            query_is_sorted = True
-        elif sys.argv[3] == '--unsorted':
-            query_is_sorted = False
-        else:
-            raise IndexError # Jump to the bottom line.
 
         trees = create_trees_dict(tree_file)
 
         with gzopen(query_file) as quf:
             slines = (line.rstrip().split(None,3) for line in quf)
             for sl in slines:
-                query_from_main(trees, sl, query_is_sorted)
+                query_from_main(trees, sl)
 
     except IndexError:
         print ('Please use the following format:\n' +
-               'ting.py <tree_file> <query_file> --(sorted|unsorted)')
+               'ting.py <tree_file> <query_file>')
