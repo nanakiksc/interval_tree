@@ -27,11 +27,11 @@ class Node():
     """
 
     def __init__(self, center):
-        # If center has not a proper value, implicitly raise a ValueError.
+        # If center is not convertible to int, implicitly raise a ValueError.
         self.center = int(center)
         self.centered = []
         self.children = [None, None]
-        self.is_checked = False
+        self.is_empty = False
 
     def __repr__(self):
         return 'Node at %d. Overlaps with %d intervals. %d children nodes' \
@@ -59,65 +59,67 @@ class Node():
 
         if query < self.center \
         and self.children[0] \
-        and not self.children[0].is_checked:
+        and not self.children[0].is_empty:
  
-            is_empty = True
-            for found in self.children[0].query_point(query):
+            empty = True
+            for found in self.children[0].query_point(query, is_sorted):
                 if found:
-                    is_empty = False
+                    empty = False
                 yield found
 
-            if is_empty and is_sorted:
-                self.children[0].is_checked = True
+            if empty and is_sorted:
+                self.children[0].is_empty = True
 
         elif self.center < query \
         and self.children[1] \
-        and not self.children[1].is_checked:
+        and not self.children[1].is_empty:
 
-            is_empty = True
-            for found in self.children[1].query_point(query):
+            empty = True
+            for found in self.children[1].query_point(query, is_sorted):
                 if found:
-                    is_empty = False
+                    empty = False
                 yield found
 
-            if is_empty and is_sorted:
-                self.children[1].is_checked = True
+            if empty and is_sorted:
+                self.children[1].is_empty = True
 
     def query_interval(self, query, is_sorted):
         """
-        Generator funtion. Yield a list of intervals (iv) in the tree that
+        Generator function. Yield a list of intervals (iv) in the tree that
         overlap, at least partially, with the query interval.
         """
 
-        yield [iv for iv in self.centered if not (iv[1] < query[0] \
-                                               or query[1] < iv[0])]
+        yield [iv for iv in self.centered if iv[0] <= query[1] \
+                                         and iv[1] >= query[0])]
 
         if query[0] < self.center \
         and self.children[0] \
-        and not self.children[0].is_checked:
+        and not self.children[0].is_empty():
 
-            is_empty = True
-            for found in self.children[0].query_interval(query):
+            empty = True
+            for found in self.children[0].query_interval(query, is_sorted):
                 if found:
-                    is_empty = False
+                    empty = False
                 yield found
 
-            if is_empty and is_sorted:
-                self.children[0].is_checked = True
+            if empty and is_sorted:
+                self.children[0].is_empty = True
 
         if self.center < query[1] \
         and self.children[1] \
-        and not self.children[1].is_checked:
+        and not self.children[1].is_empty:
 
-            is_empty = True
-            for found in self.children[1].query_interval(query):
+            empty = True
+            for found in self.children[1].query_interval(query, is_sorted):
                 if found:
-                    is_empty = False
+                    empty = False
                 yield found
 
-            if is_empty and is_sorted:
-                self.children[1].is_checked = True
+            if empty and is_sorted:
+                self.children[1].is_empty = True
 
+    def update_queue(queue):
+        queue.append(self) 
 
 class InputFormatError(Exception):
     """
@@ -209,6 +211,10 @@ def DFS_interval_query(trees, query, is_sorted):
     interval tree and yield the tree intervals that overlap with the query. 
     query must be a 3-tuple like (chromosome, start, end) for intervals and a
     2-tuple like (chromosome, position) for points.
+    When importing this function, if is_sorted == True and multiple files are
+    queried, self.is_empty has to be reinitialized to False for all nodes in the
+    tree after each file is queried. Otherwise no nodes will be checked after
+    the first file is completed!
     """
 
     set_recursion_limit()
@@ -241,15 +247,15 @@ def DFS_interval_query(trees, query, is_sorted):
 
 def query_from_main(trees, interval, is_sorted):
     try:
-        query = [sl[0], int(sl[1])]
+        query = [interval[0], int(interval[1])]
     except IndexError:
         raise InputFormatError('Query file must be in BED format.')
     except ValueError:
         raise InputFormatError('Query file must be in BED format.')
     
-    if len(query) > 2:
+    if len(interval) > 2:
         try:
-            query.append(int(sl[2]))
+            query.append(int(interval[2]))
         except ValueError:
             raise InputFormatError(
                 'Query file must be in BED format.'
@@ -261,8 +267,9 @@ def query_from_main(trees, interval, is_sorted):
 
 
 if __name__ == '__main__':
+    from gzopen import gzopen
     try:
-        trees = create_trees_dict(sys.argv[1])
+        tree_file = sys.argv[1]
         query_file = sys.argv[2]
         if sys.argv[3] == '--sorted':
             query_is_sorted = True
@@ -270,8 +277,10 @@ if __name__ == '__main__':
             query_is_sorted = False
         else:
             raise IndexError # Jump to the bottom line.
-    
-        with open(query_file) as quf:
+
+        trees = create_trees_dict(tree_file)
+
+        with gzopen(query_file) as quf:
             slines = (line.rstrip().split(None,3) for line in quf)
             for sl in slines:
                 query_from_main(trees, sl, query_is_sorted)
