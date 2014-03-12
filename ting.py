@@ -16,7 +16,11 @@
 import sys
 from collections import defaultdict
 
-from gzopen import gzopen
+# gzopen decompresses the file before calling open() if the file is compressed.
+try:
+    from gzopen import gzopen
+except ImportError:
+    gzopen = open
 
 # Really big trees could cause RuntimeError: maximum recursion depth exceeded.
 # Change this value to an integer > 1000 if you get this error.
@@ -212,6 +216,10 @@ def DFS_interval_query(trees, query):
         yield tuple([chrom] + [field for field in hit])
 
 def query_from_main(trees, interval):
+    """
+    This function is defined for readability, it is called from main() and there
+    is no need to import it.
+    """
     try:
         query = [interval[0], int(interval[1])]
     except IndexError:
@@ -229,7 +237,7 @@ def query_from_main(trees, interval):
         
     query = tuple(query)
     for overlap in DFS_interval_query(trees, query):
-        print overlap
+        print '\t'.join([str(i) for i in overlap])
 
 
 if __name__ == '__main__':
