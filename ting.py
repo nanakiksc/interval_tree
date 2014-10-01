@@ -19,6 +19,8 @@ from collections import defaultdict
 # gzopen decompresses the file before calling open() if the file is compressed.
 try:
     from gzopen import gzopen as open
+except ImportError:
+    pass
 
 class Node():
     """
