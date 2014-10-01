@@ -18,13 +18,7 @@ from collections import defaultdict
 
 # gzopen decompresses the file before calling open() if the file is compressed.
 try:
-    from gzopen import gzopen
-except ImportError:
-    gzopen = open
-
-# Really big trees could cause RuntimeError: maximum recursion depth exceeded.
-# Change this value to an integer > 1000 if you get this error.
-MAX_RECURSION_DEPTH = sys.getrecursionlimit()
+    from gzopen import gzopen as open
 
 class Node():
     """
@@ -83,13 +77,13 @@ class Node():
         yield [iv for iv in self.centered if iv[0] <= query[1] \
                                          and iv[1] >= query[0]]
 
-        if query[0] < self.center \
+        if query[1] < self.center \
         and self.children[0]:
 
             for found in self.children[0].query_interval(query):
                 yield found
 
-        if self.center < query[1] \
+        if self.center < query[0] \
         and self.children[1]:
 
             for found in self.children[1].query_interval(query):
@@ -103,16 +97,6 @@ class InputFormatError(Exception):
 
     pass
 
-def set_recursion_limit():
-    """
-    Leave maximum recursion depth at its default value (1000) if it is not
-    specified or is set at a value < 1000, change it to the specified value
-    otherwise.
-    """
-
-    if MAX_RECURSION_DEPTH and MAX_RECURSION_DEPTH > 1000:
-        sys.setrecursionlimit(MAX_RECURSION_DEPTH)
-
 def build_tree(intervals):
     """
     Create a Node instance and initialize its centered list, which contains all
@@ -120,16 +104,12 @@ def build_tree(intervals):
     create children nodes with the remainig intervals. 
     """
 
-    set_recursion_limit()
-
-    # Centers are sorted to find the median (center).
-    intervals.sort()
     # s: start, e: end, i: info.
     try:
         centers = [(s+e)/2.0 for (s,e,i) in intervals]
     except ValueError:
         centers = [(s+e)/2.0 for (s,e) in intervals]
-    center = centers[len(centers)//2]
+    center = sorted(centers)[len(centers) // 2]
                 
     centered = [i for i in intervals if i[0] <= center <= i[1]]
     left = [i for i in intervals if i[1] < center]
@@ -152,11 +132,11 @@ def create_trees_dict(intervals_file):
 
     # Temp dictionary that holds a list of all the intervals in each chromosme.
     chromosomes = defaultdict(list)
-    with gzopen(intervals_file) as fin:
-        slines = (line.rstrip().split(None,3) for line in fin)
+    with open(intervals_file) as fin:
+        slines = (line.rstrip().split(None, 3) for line in fin)
         for inter in slines:
             try:
-                interval = [int(inter[1]),int(inter[2])]
+                interval = [int(inter[1]), int(inter[2])]
             
             # Check that the input file is in BED format.
             except IndexError:
@@ -179,15 +159,13 @@ def create_trees_dict(intervals_file):
  
     return trees
 
-def DFS_interval_query(trees, query):
+def find_overlaps(trees, query):
     """
-    Generator funtion. Perform a depth-first search of the query interval on the
-    interval tree and yield the tree intervals that overlap with the query. 
+    Generator function. Perform a depth-first search of the query interval on
+    the interval tree and yield the tree intervals that overlap with the query. 
     query must be a 3-tuple like (chromosome, start, end) for intervals and a
     2-tuple like (chromosome, position) for points.
     """
-
-    set_recursion_limit()
 
     if len(query) == 3:
         chrom, start, end = query
@@ -215,10 +193,9 @@ def DFS_interval_query(trees, query):
     for hit in total_found:
         yield tuple([chrom] + [field for field in hit])
 
-def query_from_main(trees, interval):
+def _query_from_main(trees, interval):
     """
-    This function is defined for readability, it is called from main() and there
-    is no need to import it.
+    This function is defined for readability, it is called from main().
     """
     try:
         query = [interval[0], int(interval[1])]
@@ -231,13 +208,11 @@ def query_from_main(trees, interval):
         try:
             query.append(int(interval[2]))
         except ValueError:
-            raise InputFormatError(
-                'Query file must be in BED format.'
-                )
+            raise InputFormatError('Query file must be in BED format.')
         
     query = tuple(query)
-    for overlap in DFS_interval_query(trees, query):
-        print '\t'.join([str(i) for i in overlap])
+    for overlap in find_overlaps(trees, query):
+        print '\t'.join(str(i) for i in overlap)
 
 
 if __name__ == '__main__':
@@ -247,10 +222,10 @@ if __name__ == '__main__':
 
         trees = create_trees_dict(tree_file)
 
-        with gzopen(query_file) as quf:
-            slines = (line.rstrip().split(None,3) for line in quf)
+        with open(query_file) as quf:
+            slines = (line.rstrip().split(None, 3) for line in quf)
             for sl in slines:
-                query_from_main(trees, sl)
+                _query_from_main(trees, sl)
 
     except IndexError:
         print ('Please use the following format:\n' +
