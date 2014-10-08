@@ -106,12 +106,8 @@ def build_tree(intervals):
     create children nodes with the remainig intervals. 
     """
 
-    # s: start, e: end, i: info.
-    try:
-        centers = [(s+e)/2.0 for (s,e,i) in intervals]
-    except ValueError:
-        centers = [(s+e)/2.0 for (s,e) in intervals]
-    center = sorted(centers)[len(centers) // 2]
+    center_iv = intervals[len(intervals) // 2]
+    center = sum(center_iv[:2]) // 2
                 
     centered = [i for i in intervals if i[0] <= center <= i[1]]
     left = [i for i in intervals if i[1] < center]
@@ -155,7 +151,7 @@ def create_trees_dict(intervals_file):
     # Final dictionary with one tree per chromosome.
     trees = defaultdict()
     for chromosome in chromosomes:
-        trees[chromosome] = build_tree(chromosomes[chromosome])
+        trees[chromosome] = build_tree(sorted(chromosomes[chromosome]))
 
     del chromosomes
  
@@ -163,9 +159,9 @@ def create_trees_dict(intervals_file):
 
 def find_overlaps(trees, query):
     """
-    Generator function. Perform a depth-first search of the query interval on
-    the interval tree and yield the tree intervals that overlap with the query. 
-    query must be a 3-tuple like (chromosome, start, end) for intervals and a
+    Generator function. Perform a bisection search of the query interval on the
+    interval tree and yield the tree intervals that overlap with the query. 
+    query must be a 3-tuple like (chromosome, start, end) for intervals or a
     2-tuple like (chromosome, position) for points.
     """
 
@@ -180,15 +176,15 @@ def find_overlaps(trees, query):
         raise InputFormatError('Query file must be in BED format.')
 
     total_found = []
-    for chromosome in trees:
-        if chrom != chromosome:
-            continue
+    try:
         if is_interval:
-            for found in trees[chromosome].query_interval(position):
+            for found in trees[chrom].query_interval(position):
                 total_found.extend(found)
         else:
-            for found in trees[chromosome].query_point(position):
+            for found in trees[chrom].query_point(position):
                 total_found.extend(found)
+    except KeyError:
+        pass
     
     if not total_found:
         return
@@ -215,7 +211,6 @@ def _query_from_main(trees, interval):
     query = tuple(query)
     for overlap in find_overlaps(trees, query):
         print '\t'.join(str(i) for i in overlap)
-
 
 if __name__ == '__main__':
     try:
